@@ -39,7 +39,7 @@
             
             <!-- Preview Area -->
             <div id="preview-container" class="w-full aspect-square bg-gray-100 rounded-2xl border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden mb-6 relative">
-                <video id="camera-feed" class="hidden w-full h-full object-cover"></video>
+                <video id="camera-feed" class="hidden w-full h-full object-cover" playsinline></video>
                 <img id="image-preview" class="hidden w-full h-full object-cover">
                 <div id="placeholder" class="text-center p-4">
                     <i class="fas fa-camera text-4xl text-gray-300 mb-2"></i>
@@ -51,7 +51,7 @@
             <div class="w-full grid grid-cols-2 gap-4 mb-6">
                 <button id="btn-camera" class="bg-pink-50 text-pink-600 font-bold py-3 px-4 rounded-xl border border-pink-200 hover:bg-pink-100 transition flex flex-col items-center">
                     <i class="fas fa-camera mb-1 text-xl"></i>
-                    <span class="text-xs">カメラを起動</span>
+                    <span id="camera-btn-text" class="text-xs">カメラを起動</span>
                 </button>
                 <button id="btn-upload" class="bg-green-50 text-green-600 font-bold py-3 px-4 rounded-xl border border-green-200 hover:bg-green-100 transition flex flex-col items-center">
                     <i class="fas fa-image mb-1 text-xl"></i>
@@ -107,7 +107,7 @@
                 </div>
             </div>
 
-            <div id="error-message" class="hidden w-full p-4 bg-red-50 text-red-600 rounded-xl text-center text-sm border border-red-100"></div>
+            <div id="error-message" class="hidden w-full p-4 bg-red-50 text-red-600 rounded-xl text-xs border border-red-100 mt-4 whitespace-pre-wrap overflow-auto max-h-32"></div>
         </main>
 
         <footer class="p-4 text-center text-gray-400 text-xs">
@@ -115,7 +115,7 @@
         </footer>
     </div>
 
-    <!-- Hidden canvas for capturing video frame -->
+    <!-- Hidden canvas for capturing and resizing -->
     <canvas id="capture-canvas" class="hidden"></canvas>
 
     <script>
@@ -123,6 +123,7 @@
         const modelName = "gemini-2.5-flash-preview-09-2025";
 
         const btnCamera = document.getElementById('btn-camera');
+        const cameraBtnText = document.getElementById('camera-btn-text');
         const btnUpload = document.getElementById('btn-upload');
         const btnAnalyze = document.getElementById('btn-analyze');
         const fileInput = document.getElementById('file-input');
@@ -153,19 +154,36 @@
                 video.classList.remove('hidden');
                 imagePreview.classList.add('hidden');
                 placeholder.classList.add('hidden');
-                btnCamera.innerHTML = '<i class="fas fa-camera-retro mb-1 text-xl"></i><span class="text-xs">シャッター</span>';
+                cameraBtnText.textContent = 'シャッター';
                 isCameraActive = true;
                 btnAnalyze.disabled = true;
             } catch (err) {
-                showError("カメラにアクセスできません。設定を確認してください。");
+                showError("カメラにアクセスできません。ブラウザの設定で許可してください。");
             }
         }
 
         function capturePhoto() {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
+            // Resize to max 1024px for faster/stable API call
+            const maxDimension = 1024;
+            let width = video.videoWidth;
+            let height = video.videoHeight;
+
+            if (width > height) {
+                if (width > maxDimension) {
+                    height *= maxDimension / width;
+                    width = maxDimension;
+                }
+            } else {
+                if (height > maxDimension) {
+                    width *= maxDimension / height;
+                    height = maxDimension;
+                }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
             const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0);
+            ctx.drawImage(video, 0, 0, width, height);
             
             const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
             selectedImageBase64 = dataUrl.split(',')[1];
@@ -180,7 +198,7 @@
             }
 
             isCameraActive = false;
-            btnCamera.innerHTML = '<i class="fas fa-camera mb-1 text-xl"></i><span class="text-xs">カメラを起動</span>';
+            cameraBtnText.textContent = 'カメラを起動';
             btnAnalyze.disabled = false;
             btnAnalyze.classList.replace('bg-gray-400', 'bg-pink-500');
         }
@@ -201,6 +219,7 @@
                 if (stream) stream.getTracks().forEach(track => track.stop());
                 video.classList.add('hidden');
                 isCameraActive = false;
+                cameraBtnText.textContent = 'カメラを起動';
             }
             fileInput.click();
         };
@@ -211,22 +230,39 @@
 
             const reader = new FileReader();
             reader.onload = (event) => {
-                const dataUrl = event.target.result;
-                selectedImageBase64 = dataUrl.split(',')[1];
-                imagePreview.src = dataUrl;
-                imagePreview.classList.remove('hidden');
-                placeholder.classList.add('hidden');
-                btnAnalyze.disabled = false;
-                btnAnalyze.classList.replace('bg-gray-400', 'bg-pink-500');
+                const img = new Image();
+                img.onload = () => {
+                    // Resize large uploads
+                    const maxDim = 1024;
+                    let w = img.width;
+                    let h = img.height;
+                    if (w > maxDim || h > maxDim) {
+                        const ratio = Math.min(maxDim / w, maxDim / h);
+                        w *= ratio;
+                        h *= ratio;
+                    }
+                    canvas.width = w;
+                    canvas.height = h;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, w, h);
+                    
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                    selectedImageBase64 = dataUrl.split(',')[1];
+                    imagePreview.src = dataUrl;
+                    imagePreview.classList.remove('hidden');
+                    placeholder.classList.add('hidden');
+                    btnAnalyze.disabled = false;
+                    btnAnalyze.classList.replace('bg-gray-400', 'bg-pink-500');
+                };
+                img.src = event.target.result;
             };
             reader.readAsDataURL(file);
         };
 
         async function analyzeFlower(base64Data, retries = 0) {
             const systemPrompt = "あなたは植物学者です。提供された画像のお花を正確に特定してください。";
-            const userPrompt = "この花の名前と詳細を教えてください。";
+            const userPrompt = "この花の名前、学名、花言葉、生態、育て方のコツを教えてください。";
 
-            // JSONスキーマの定義
             const responseSchema = {
                 type: "OBJECT",
                 properties: {
@@ -245,6 +281,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         contents: [{
+                            role: "user",
                             parts: [
                                 { text: userPrompt },
                                 { inlineData: { mimeType: "image/jpeg", data: base64Data } }
@@ -264,18 +301,24 @@
                         await new Promise(resolve => setTimeout(resolve, delay));
                         return analyzeFlower(base64Data, retries + 1);
                     }
-                    throw new Error(`APIエラー: ${response.status}`);
+                    const errBody = await response.text();
+                    throw new Error(`API Error ${response.status}: ${errBody}`);
                 }
 
                 const data = await response.json();
-                const textResult = data.candidates?.[0]?.content?.parts?.[0]?.text;
-                if (!textResult) throw new Error("AIからの応答が空でした。");
+                
+                // Check if result exists
+                if (!data.candidates || data.candidates.length === 0) {
+                    throw new Error("AIが画像を認識できませんでした（安全性フィルターまたは低品質な画像）。別角度で撮り直してください。");
+                }
+
+                const textResult = data.candidates[0].content?.parts?.[0]?.text;
+                if (!textResult) throw new Error("AIからの回答が空でした。");
                 
                 return JSON.parse(textResult);
 
             } catch (err) {
-                console.error("Analysis error:", err);
-                if (retries >= 5) throw new Error("接続が不安定です。時間をおいて再試行してください。");
+                if (retries >= 5) throw new Error("通信が混み合っています。少し時間をおいてから再度お試しください。");
                 throw err;
             }
         }
@@ -290,26 +333,26 @@
             try {
                 const result = await analyzeFlower(selectedImageBase64);
                 
-                document.getElementById('res-name').textContent = result.name || "判定不能";
+                document.getElementById('res-name').textContent = result.name || "不明";
                 document.getElementById('res-scientific').textContent = result.scientificName || "";
                 document.getElementById('res-language').textContent = result.languageOfFlowers || "不明";
-                document.getElementById('res-ecology').textContent = result.ecology || "情報がありません。";
-                document.getElementById('res-tips').textContent = result.careTips || "情報がありません。";
+                document.getElementById('res-ecology').textContent = result.ecology || "情報なし";
+                document.getElementById('res-tips').textContent = result.careTips || "情報なし";
 
                 loading.classList.add('hidden');
                 resultCard.classList.remove('hidden');
-                // Scroll to result
                 resultCard.scrollIntoView({ behavior: 'smooth' });
             } catch (err) {
                 loading.classList.add('hidden');
-                showError(`解析に失敗しました: ${err.message}`);
+                showError(`エラーが発生しました：\n${err.message}`);
+                console.error(err);
             } finally {
                 btnAnalyze.disabled = false;
             }
         };
 
         function showError(msg) {
-            errorMessage.innerHTML = `<i class="fas fa-exclamation-triangle mr-2"></i>${msg}`;
+            errorMessage.innerHTML = `<div class="font-bold mb-1"><i class="fas fa-exclamation-circle mr-1"></i>エラー内容</div>${msg}`;
             errorMessage.classList.remove('hidden');
         }
     </script>
