@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AIお花の名前を調べる - Flower Identifier</title>
+    <title>AIお花の名前を調べる</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -31,7 +31,7 @@
         <!-- Header -->
         <header class="flower-gradient p-6 text-white text-center shadow-md">
             <h1 class="text-2xl font-bold mb-1"><i class="fas fa-seedling mr-2"></i>AI お花の名前を調べる</h1>
-            <p class="text-sm opacity-90">写真を撮って、お花の秘密を知ろう</p>
+            <p class="text-sm opacity-90">写真を撮ってお花の生態を知ろう</p>
         </header>
 
         <!-- Main Content -->
@@ -67,7 +67,7 @@
             <!-- Results Section -->
             <div id="loading" class="hidden flex flex-col items-center py-8">
                 <div class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 mb-4"></div>
-                <p class="text-pink-500 font-medium">お花を調べています...</p>
+                <p class="text-pink-500 font-medium">お花を解析中です...</p>
             </div>
 
             <div id="result-card" class="hidden w-full bg-white border border-pink-100 rounded-2xl p-5 shadow-sm space-y-4">
@@ -76,52 +76,46 @@
                     <p id="res-scientific" class="text-sm italic text-gray-500">--</p>
                 </div>
                 
-                <div class="flex items-start space-x-3">
-                    <div class="bg-pink-100 p-2 rounded-lg text-pink-500">
-                        <i class="fas fa-comment-dots"></i>
+                <div class="space-y-3">
+                    <div class="flex items-start space-x-3">
+                        <div class="bg-pink-100 p-2 rounded-lg text-pink-500"><i class="fas fa-comment-dots"></i></div>
+                        <div>
+                            <h3 class="font-bold text-sm text-gray-700">花言葉</h3>
+                            <p id="res-language" class="text-sm text-gray-600">--</p>
+                        </div>
                     </div>
-                    <div>
-                        <h3 class="font-bold text-sm text-gray-700">花言葉</h3>
-                        <p id="res-language" class="text-sm text-gray-600">--</p>
+                    <div class="flex items-start space-x-3">
+                        <div class="bg-green-100 p-2 rounded-lg text-green-600"><i class="fas fa-leaf"></i></div>
+                        <div>
+                            <h3 class="font-bold text-sm text-gray-700">生態・特徴</h3>
+                            <p id="res-ecology" class="text-sm text-gray-600 leading-relaxed">--</p>
+                        </div>
                     </div>
-                </div>
-
-                <div class="flex items-start space-x-3">
-                    <div class="bg-green-100 p-2 rounded-lg text-green-600">
-                        <i class="fas fa-leaf"></i>
-                    </div>
-                    <div>
-                        <h3 class="font-bold text-sm text-gray-700">生態・特徴</h3>
-                        <p id="res-ecology" class="text-sm text-gray-600 leading-relaxed">--</p>
-                    </div>
-                </div>
-
-                <div class="flex items-start space-x-3">
-                    <div class="bg-blue-100 p-2 rounded-lg text-blue-600">
-                        <i class="fas fa-hand-holding-heart"></i>
-                    </div>
-                    <div>
-                        <h3 class="font-bold text-sm text-gray-700">育て方のヒント</h3>
-                        <p id="res-tips" class="text-sm text-gray-600">--</p>
+                    <div class="flex items-start space-x-3">
+                        <div class="bg-blue-100 p-2 rounded-lg text-blue-600"><i class="fas fa-hand-holding-heart"></i></div>
+                        <div>
+                            <h3 class="font-bold text-sm text-gray-700">育て方のヒント</h3>
+                            <p id="res-tips" class="text-sm text-gray-600">--</p>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div id="error-message" class="hidden w-full p-4 bg-red-50 text-red-600 rounded-xl text-xs border border-red-100 mt-4 whitespace-pre-wrap overflow-auto max-h-32"></div>
+            <div id="error-message" class="hidden w-full p-4 bg-red-50 text-red-600 rounded-xl text-xs border border-red-100 mt-4"></div>
         </main>
 
-        <footer class="p-4 text-center text-gray-400 text-xs">
-            Powered by Gemini AI • 2026
+        <footer class="p-4 text-center text-gray-400 text-xs mt-auto">
+            Powered by Gemini 2.5 Flash
         </footer>
     </div>
 
-    <!-- Hidden canvas for capturing and resizing -->
-    <canvas id="capture-canvas" class="hidden"></canvas>
+    <!-- Hidden canvas for processing images -->
+    <canvas id="process-canvas" class="hidden"></canvas>
 
     <script>
-        const apiKey = ""; // 実行環境から自動提供
-        const modelName = "gemini-2.5-flash-preview-09-2025";
-
+        // API Key is automatically handled by the environment when defined as an empty string
+        const apiKey = "";
+        
         const btnCamera = document.getElementById('btn-camera');
         const cameraBtnText = document.getElementById('camera-btn-text');
         const btnUpload = document.getElementById('btn-upload');
@@ -130,7 +124,7 @@
         const video = document.getElementById('camera-feed');
         const imagePreview = document.getElementById('image-preview');
         const placeholder = document.getElementById('placeholder');
-        const canvas = document.getElementById('capture-canvas');
+        const canvas = document.getElementById('process-canvas');
         const loading = document.getElementById('loading');
         const resultCard = document.getElementById('result-card');
         const errorMessage = document.getElementById('error-message');
@@ -146,55 +140,36 @@
 
         async function startCamera() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: 'environment' } 
-                });
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
                 video.srcObject = stream;
                 video.play();
                 video.classList.remove('hidden');
                 imagePreview.classList.add('hidden');
                 placeholder.classList.add('hidden');
-                cameraBtnText.textContent = 'シャッター';
+                cameraBtnText.textContent = '撮影する';
                 isCameraActive = true;
                 btnAnalyze.disabled = true;
             } catch (err) {
-                showError("カメラにアクセスできません。ブラウザの設定で許可してください。");
+                showError("カメラへのアクセスを許可してください。");
             }
         }
 
         function capturePhoto() {
-            // Resize to max 1024px for faster/stable API call
-            const maxDimension = 1024;
-            let width = video.videoWidth;
-            let height = video.videoHeight;
-
-            if (width > height) {
-                if (width > maxDimension) {
-                    height *= maxDimension / width;
-                    width = maxDimension;
-                }
-            } else {
-                if (height > maxDimension) {
-                    width *= maxDimension / height;
-                    height = maxDimension;
-                }
-            }
-
-            canvas.width = width;
-            canvas.height = height;
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
             const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0, width, height);
+            ctx.drawImage(video, 0, 0);
             
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+            // Standardizing to JPEG and reasonable quality
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
             selectedImageBase64 = dataUrl.split(',')[1];
             
             imagePreview.src = dataUrl;
             imagePreview.classList.remove('hidden');
             video.classList.add('hidden');
             
-            const stream = video.srcObject;
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(track => track.stop());
             }
 
             isCameraActive = false;
@@ -205,18 +180,13 @@
 
         btnCamera.onclick = () => {
             resetUI();
-            if (isCameraActive) {
-                capturePhoto();
-            } else {
-                startCamera();
-            }
+            if (isCameraActive) capturePhoto(); else startCamera();
         };
 
         btnUpload.onclick = () => {
             resetUI();
-            if (isCameraActive) {
-                const stream = video.srcObject;
-                if (stream) stream.getTracks().forEach(track => track.stop());
+            if (isCameraActive && video.srcObject) {
+                video.srcObject.getTracks().forEach(track => track.stop());
                 video.classList.add('hidden');
                 isCameraActive = false;
                 cameraBtnText.textContent = 'カメラを起動';
@@ -232,21 +202,16 @@
             reader.onload = (event) => {
                 const img = new Image();
                 img.onload = () => {
-                    // Resize large uploads
-                    const maxDim = 1024;
-                    let w = img.width;
-                    let h = img.height;
+                    const maxDim = 800; // Limit size for stable API call
+                    let w = img.width, h = img.height;
                     if (w > maxDim || h > maxDim) {
                         const ratio = Math.min(maxDim / w, maxDim / h);
-                        w *= ratio;
-                        h *= ratio;
+                        w *= ratio; h *= ratio;
                     }
-                    canvas.width = w;
-                    canvas.height = h;
+                    canvas.width = w; canvas.height = h;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, w, h);
-                    
-                    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
                     selectedImageBase64 = dataUrl.split(',')[1];
                     imagePreview.src = dataUrl;
                     imagePreview.classList.remove('hidden');
@@ -259,100 +224,75 @@
             reader.readAsDataURL(file);
         };
 
-        async function analyzeFlower(base64Data, retries = 0) {
-            const systemPrompt = "あなたは植物学者です。提供された画像のお花を正確に特定してください。";
-            const userPrompt = "この花の名前、学名、花言葉、生態、育て方のコツを教えてください。";
+        async function analyzeFlowerAPI(base64Data, retries = 0) {
+            // Simplified prompt structure for maximum compatibility
+            const promptText = `あなたは植物学者です。この画像のお花を鑑定してください。回答は必ず以下のJSON形式のみで返してください：
+            {"name": "お花の名前", "scientificName": "学名", "languageOfFlowers": "花言葉", "ecology": "生態や特徴", "careTips": "育て方のヒント"}`;
 
-            const responseSchema = {
-                type: "OBJECT",
-                properties: {
-                    name: { type: "STRING" },
-                    scientificName: { type: "STRING" },
-                    languageOfFlowers: { type: "STRING" },
-                    ecology: { type: "STRING" },
-                    careTips: { type: "STRING" }
-                },
-                required: ["name", "scientificName", "languageOfFlowers", "ecology", "careTips"]
-            };
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
 
             try {
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
+                const response = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         contents: [{
-                            role: "user",
                             parts: [
-                                { text: userPrompt },
+                                { text: promptText },
                                 { inlineData: { mimeType: "image/jpeg", data: base64Data } }
                             ]
                         }],
-                        systemInstruction: { parts: [{ text: systemPrompt }] },
-                        generationConfig: { 
-                            responseMimeType: "application/json",
-                            responseSchema: responseSchema
+                        generationConfig: {
+                            responseMimeType: "application/json"
                         }
                     })
                 });
 
                 if (!response.ok) {
                     if (response.status === 429 && retries < 5) {
-                        const delay = Math.pow(2, retries) * 1000;
-                        await new Promise(resolve => setTimeout(resolve, delay));
-                        return analyzeFlower(base64Data, retries + 1);
+                        await new Promise(r => setTimeout(r, Math.pow(2, retries) * 1000));
+                        return analyzeFlowerAPI(base64Data, retries + 1);
                     }
-                    const errBody = await response.text();
-                    throw new Error(`API Error ${response.status}: ${errBody}`);
+                    const errorJson = await response.json().catch(() => ({}));
+                    throw new Error(errorJson.error?.message || `API Error ${response.status}`);
                 }
 
                 const data = await response.json();
-                
-                // Check if result exists
-                if (!data.candidates || data.candidates.length === 0) {
-                    throw new Error("AIが画像を認識できませんでした（安全性フィルターまたは低品質な画像）。別角度で撮り直してください。");
-                }
-
-                const textResult = data.candidates[0].content?.parts?.[0]?.text;
-                if (!textResult) throw new Error("AIからの回答が空でした。");
-                
-                return JSON.parse(textResult);
+                const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!text) throw new Error("AIからの回答がありませんでした。");
+                return JSON.parse(text);
 
             } catch (err) {
-                if (retries >= 5) throw new Error("通信が混み合っています。少し時間をおいてから再度お試しください。");
+                if (retries >= 5) throw err;
                 throw err;
             }
         }
 
         btnAnalyze.onclick = async () => {
             if (!selectedImageBase64) return;
-
             resetUI();
             loading.classList.remove('hidden');
             btnAnalyze.disabled = true;
 
             try {
-                const result = await analyzeFlower(selectedImageBase64);
-                
+                const result = await analyzeFlowerAPI(selectedImageBase64);
                 document.getElementById('res-name').textContent = result.name || "不明";
                 document.getElementById('res-scientific').textContent = result.scientificName || "";
                 document.getElementById('res-language').textContent = result.languageOfFlowers || "不明";
-                document.getElementById('res-ecology').textContent = result.ecology || "情報なし";
-                document.getElementById('res-tips').textContent = result.careTips || "情報なし";
-
-                loading.classList.add('hidden');
+                document.getElementById('res-ecology').textContent = result.ecology || "情報がありません。";
+                document.getElementById('res-tips').textContent = result.careTips || "情報がありません。";
                 resultCard.classList.remove('hidden');
                 resultCard.scrollIntoView({ behavior: 'smooth' });
             } catch (err) {
-                loading.classList.add('hidden');
-                showError(`エラーが発生しました：\n${err.message}`);
-                console.error(err);
+                showError(`鑑定に失敗しました。時間をおいて再度お試しください。\n(${err.message})`);
             } finally {
+                loading.classList.add('hidden');
                 btnAnalyze.disabled = false;
             }
         };
 
         function showError(msg) {
-            errorMessage.innerHTML = `<div class="font-bold mb-1"><i class="fas fa-exclamation-circle mr-1"></i>エラー内容</div>${msg}`;
+            errorMessage.innerHTML = `<i class="fas fa-exclamation-triangle mr-1"></i>${msg}`;
             errorMessage.classList.remove('hidden');
         }
     </script>
